@@ -187,6 +187,13 @@
   animation: spin 1s linear infinite;
 }
 
+/* Small spinner for buttons */
+.spinner.small {
+  width: 12px;
+  height: 12px;
+  border-width: 1px;
+}
+
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
@@ -493,4 +500,74 @@
     margin: 1rem !important;
     padding: 1rem !important;
   }
+}
+
+/* Priority indicators */
+.priority-indicator {
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin-left: 0.5rem;
+}
+
+.priority-indicator.urgent {
+  background: #ff4444;
+  color: white;
+}
+
+.priority-indicator.soon {
+  background: #ff8800;
+  color: white;
+}
+
+.priority-indicator.analyzed {
+  background: #4CAF50;
+  color: white;
+}
+
+/* Extracted data display */
+.extracted-data-container {
+  background: rgba(60, 40, 100, 0.3);
+  padding: 0.5rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.extracted-data-item {
+  margin-bottom: 0.3rem;
+}
+
+.extracted-data-item.amount {
+  color: #FF4B7E;
+  font-weight: bold;
+}
+
+.extracted-data-item.due-date {
+  color: #FFB300;
+}
+
+.extracted-data-item.document-type {
+  color: #4CAF50;
+}
+
+/* Enhanced mail list item */
+.mailbox-list-item .mail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.mail-subject {
+  margin-bottom: 0.5rem;
+  font-weight: 500;
 }

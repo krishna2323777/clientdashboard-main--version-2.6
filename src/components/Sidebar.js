@@ -151,13 +151,13 @@ const Sidebar = ({ onToggle }) => {
                   {!collapsed && <span className="label">Home</span>}
                 </NavLink>
               </li>
+              
               <li>
-                <NavLink to="/ebranch" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
-                  <span className="icon"><Globe size={18} /></span>
-                  {!collapsed && <span className="label">eBranch</span>}
+                <NavLink to="/mailbox" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
+                  <span className="icon"><Mail size={18} /></span>
+                  {!collapsed && <span className="label">Inbox</span>}
                 </NavLink>
               </li>
-             
     
               <li>
                 <NavLink to="/dataroom" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
@@ -193,12 +193,6 @@ const Sidebar = ({ onToggle }) => {
                 <NavLink to="/comprehensive-tax-dashboard" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
                   <span className="icon"><Percent size={18} /></span>
                   {!collapsed && <span className="label">Tax Hub</span>}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/mailbox" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
-                  <span className="icon"><Mail size={18} /></span>
-                  {!collapsed && <span className="label">Mailbox</span>}
                 </NavLink>
               </li>
              

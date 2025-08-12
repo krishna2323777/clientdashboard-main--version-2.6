@@ -51,6 +51,7 @@ import CorporateIncomeTax from './components/CorporateIncomeTax';
 import Invoices from './components/Invoices';
 import BranchRegistrationRequirements from './components/BranchRegistrationRequirements';
 import VatRequirement from './components/VatRequirement';
+import FinancialData from './components/FinancialData';
 
 
 function App() { 
@@ -123,6 +124,7 @@ function App() {
                   <Route path="/target-company/:id" element={<TargetCompanyDetails />} />
                   <Route path="/invoices" element={<Invoices />} />
                   <Route path="/vat-requirement" element={<VatRequirement />} />
+                  <Route path="/financial-data" element={<FinancialData />} />
                 </Route>
               </Route>
             </Route>
