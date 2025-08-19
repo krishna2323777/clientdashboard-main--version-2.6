@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "./SupabaseClient";
 import "./Calendar.css";
 
 const ComplianceDeadlines = () => {
+  const location = useLocation();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -25,14 +27,76 @@ const ComplianceDeadlines = () => {
     "Legal Agreements",
     "Shipments",
     "KYC",
+    "Operations",
   ];
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeTab, setActiveTab] = useState("All Tasks");
   const [selectedTags, setSelectedTags] = useState([]);
   const [sortOption, setSortOption] = useState("deadline");
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     fetchTasks();
+    
+    // Check URL parameters for task creation
+    const urlParams = new URLSearchParams(location.search);
+    const action = urlParams.get('action');
+    
+    if (action === 'create-task') {
+      console.log('Creating task from URL parameters:', location.search);
+      
+      // Pre-fill form with URL parameters
+      const subject = urlParams.get('subject') || '';
+      const priority = urlParams.get('priority') || 'Medium';
+      const dueDate = urlParams.get('dueDate') || '';
+      const source = urlParams.get('source') || '';
+      const type = urlParams.get('type') || 'Company';
+      
+      // Validate and format due date
+      let formattedDueDate = dueDate;
+      if (dueDate) {
+        try {
+          const date = new Date(dueDate);
+          if (isNaN(date.getTime())) {
+            formattedDueDate = ''; // Invalid date, clear it
+          } else {
+            formattedDueDate = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+          }
+        } catch (error) {
+          formattedDueDate = '';
+        }
+      }
+      
+      // Map priority to match form options (case-insensitive)
+      let mappedPriority = 'Medium';
+      if (priority.toLowerCase() === 'high') mappedPriority = 'High';
+      else if (priority.toLowerCase() === 'low') mappedPriority = 'Low';
+      else if (priority.toLowerCase() === 'medium') mappedPriority = 'Medium';
+      
+      // Map type to match form options
+      let mappedType = 'Company';
+      if (type === 'tax-return') mappedType = 'Tax';
+      else if (type === 'document-analysis') mappedType = 'Company';
+      else if (type === 'channel-management') mappedType = 'Operations';
+      else if (type === 'general') mappedType = 'Company';
+      
+      const newFormData = {
+        title: subject,
+        description: `Task created from ${source} - ${subject}`,
+        type: mappedType,
+        due_date: formattedDueDate,
+        priority: mappedPriority,
+        status: "Pending",
+        assigned_to: "",
+      };
+      
+      console.log('Setting form data:', newFormData);
+      setFormData(newFormData);
+      
+      // Auto-open the form
+      setShowForm(true);
+      setSuccessMessage(""); // Clear any existing success message
+    }
     
     // Check if there's pending task data from the analysis modal
     const pendingTaskData = sessionStorage.getItem('pendingTaskData');
@@ -56,7 +120,7 @@ const ComplianceDeadlines = () => {
         sessionStorage.removeItem('pendingTaskData');
       }
     }
-  }, []);
+  }, [location.search]);
 
   const fetchTasks = async () => {
     try {
@@ -85,10 +149,16 @@ const ComplianceDeadlines = () => {
 
   const handleAddTask = () => {
     setShowForm(true);
+    setSuccessMessage(""); // Clear any existing success message
   };
 
   const handleCloseModal = () => {
     setShowForm(false);
+    
+    // Clear URL parameters when form is closed
+    if (location.search.includes('action=create-task')) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   };
 
   const handleFormSubmit = async (e) => {
@@ -143,6 +213,15 @@ const ComplianceDeadlines = () => {
       });
       setSelectedTags([]);
       setShowForm(false); // Close the form modal
+      
+      // Clear URL parameters after successful task creation
+      if (location.search.includes('action=create-task')) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      
+      // Show success message
+      setSuccessMessage("Task created successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000); // Auto-hide after 3 seconds
     } catch (error) {
       console.error("Error adding task:", error);
       alert("Failed to add task. Please try again.");
@@ -230,6 +309,22 @@ const ComplianceDeadlines = () => {
       <div className="tasks-header">
         <h2>Tasks</h2>
         <p>Manage and track your company's tasks and to-dos</p>
+        
+        {/* Success Message */}
+        {successMessage && (
+          <div style={{
+            background: 'rgba(76, 175, 80, 0.2)',
+            color: '#4CAF50',
+            border: '1px solid rgba(76, 175, 80, 0.3)',
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            marginTop: '1rem',
+            textAlign: 'center',
+            fontWeight: '500'
+          }}>
+            ✅ {successMessage}
+          </div>
+        )}
         
         <div className="tasks-actions">
           <button className="add-task-button" onClick={handleAddTask}>
@@ -420,7 +515,13 @@ const ComplianceDeadlines = () => {
                 <button
                   type="button"
                   className="calendar-task-modal-cancel"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false);
+                    // Clear URL parameters when form is cancelled
+                    if (location.search.includes('action=create-task')) {
+                      window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                  }}
                 >
                   Cancel
                 </button>
@@ -448,6 +549,7 @@ const ComplianceDeadlines = () => {
                 {task.type === "Legal Agreements" && "📄"}
                 {task.type === "Shipments" && "📦"}
                 {task.type === "KYC" && "🔍"}
+                {task.type === "Operations" && "⚙️"}
               </div>
               <div className="task-content">
                 <div className="task-header">

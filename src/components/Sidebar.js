@@ -151,18 +151,18 @@ const Sidebar = ({ onToggle }) => {
                   {!collapsed && <span className="label">Home</span>}
                 </NavLink>
               </li>
-              
-              <li>
-                <NavLink to="/mailbox" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
-                  <span className="icon"><Mail size={18} /></span>
-                  {!collapsed && <span className="label">Inbox</span>}
-                </NavLink>
-              </li>
+             
     
               <li>
                 <NavLink to="/dataroom" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
                   <span className="icon"><Database size={18} /></span>
                   {!collapsed && <span className="label">Data Center</span>}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/mailbox" className={({isActive}) => isActive ? 'active' : ''} onClick={handleNavClick}>
+                  <span className="icon"><Mail size={18} /></span>
+                  {!collapsed && <span className="label">Inbox</span>}
                 </NavLink>
               </li>
             </ul>

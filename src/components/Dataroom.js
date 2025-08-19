@@ -751,7 +751,7 @@ const Dataroom = () => {
             alignItems: 'center',
             gap: '12px'
           }}>
-            <span className="dru-upload-icon"> <svg width="28" height="28" fill="none" viewBox="0 0 28 28"><path d="M14 22V6M14 6l-5 5M14 6l5 5" stroke="#FF4D80" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+            
             <div style={{ textAlign: 'center' }}>
               <div className="dru-upload-title">Upload Documents</div>
               <div className="dru-upload-subtitle">Upload documents to your data room for processing and analysis</div>

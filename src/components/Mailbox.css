@@ -11,7 +11,17 @@
   margin-bottom: 0.2em;
   font-weight: 700;
 }
-
+.button {
+  /* background-color: #d7b2b2; */
+  color: rgb(31, 30, 30);
+  padding: 14px 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background-color 0.3s ease;
+}
 .mailbox-container p {
   color: #b8b8ff;
   margin-bottom: 2em;
@@ -570,4 +580,174 @@
 .mail-subject {
   margin-bottom: 0.5rem;
   font-weight: 500;
+}
+
+/* Header Navigation Styles */
+.mailbox-header-nav {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border-radius: 16px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.mailbox-header-nav .nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.mailbox-header-nav .nav-tabs button {
+  background: transparent;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+  white-space: nowrap;
+  border-radius: 6px;
+  min-width: fit-content;
+}
+
+.mailbox-header-nav .nav-tabs button:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mailbox-header-nav .nav-tabs button.active {
+  background: rgba(30, 20, 60, 0.8);
+  opacity: 1;
+  color: white;
+}
+
+.mailbox-header-nav .action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-shrink: 0;
+}
+
+.mailbox-header-nav .action-buttons button {
+  background: #FF4B7E;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.mailbox-header-nav .action-buttons button:hover {
+  background: #FF6B9D;
+  transform: translateY(-1px);
+}
+
+/* Responsive adjustments for different zoom levels */
+@media screen and (max-width: 1400px) {
+  .mailbox-header-nav {
+    padding: 0.8rem 1rem;
+  }
+  
+  .mailbox-header-nav .nav-tabs {
+    gap: 0.6rem;
+  }
+  
+  .mailbox-header-nav .nav-tabs button {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.8rem;
+  }
+  
+  .mailbox-header-nav .action-buttons button {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media screen and (max-width: 1200px) {
+  .mailbox-header-nav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .mailbox-header-nav .nav-tabs {
+    justify-content: center;
+    order: 1;
+  }
+  
+  .mailbox-header-nav .action-buttons {
+    justify-content: center;
+    order: 2;
+  }
+  
+  .mailbox-header-nav .nav-tabs button {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+  }
+}
+
+@media screen and (max-width: 900px) {
+  .mailbox-header-nav .nav-tabs {
+    gap: 0.5rem;
+  }
+  
+  .mailbox-header-nav .nav-tabs button {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+  }
+  
+  .mailbox-header-nav .action-buttons button {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .mailbox-header-nav {
+    padding: 0.6rem 0.8rem;
+  }
+  
+  .mailbox-header-nav .nav-tabs {
+    gap: 0.4rem;
+  }
+  
+  .mailbox-header-nav .nav-tabs button {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.7rem;
+    min-width: auto;
+  }
+  
+  .mailbox-header-nav .action-buttons {
+    gap: 0.5rem;
+  }
+  
+  .mailbox-header-nav .action-buttons button {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+  }
+}
+
+/* Ensure proper spacing for zoom levels */
+@media screen and (min-width: 1200px) and (max-width: 1600px) {
+  .mailbox-header-nav .nav-tabs {
+    gap: 0.7rem;
+  }
+  
+  .mailbox-header-nav .nav-tabs button {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.82rem;
+  }
 }

@@ -78,32 +78,32 @@ const requiredDocuments = [
     description: 'Profit & Loss, Balance Sheet for current year'
   },
   {
-    icon: <MdAccountBalance style={{ fontSize: '1.5rem', color: '#059669' }} />,
+    icon: <FaBalanceScale style={{ fontSize: '1.5rem', color: '#10b981' }} />,
     title: 'Trial Balance',
     description: 'Detailed account balances'
   },
   {
-    icon: <FaBalanceScale style={{ fontSize: '1.5rem', color: '#7c2d12' }} />,
+    icon: <FaFileAlt style={{ fontSize: '1.5rem', color: '#ef4444' }} />,
     title: 'Balance Sheet',
     description: 'Assets, liabilities and equity statement'
   },
   {
-    icon: <FaChartLine style={{ fontSize: '1.5rem', color: '#dc2626' }} />,
-    title: 'Cashflow Statement',
-    description: 'Cash inflows and outflows analysis'
-  },
-  {
-    icon: <FaMoneyBillWave style={{ fontSize: '1.5rem', color: '#eab308' }} />,
+    icon: <FaChartLine style={{ fontSize: '1.5rem', color: '#f59e0b' }} />,
     title: 'Profit and Loss Statement',
     description: 'Revenue, expenses and net income analysis'
+  },
+  {
+    icon: <FaMoneyBillWave style={{ fontSize: '1.5rem', color: '#f97316' }} />,
+    title: 'Cashflow Statement',
+    description: 'Cash inflows and outflows analysis'
   }
 ];  
 
 const steps = [
-  { icon: <FaFileAlt />, label: 'Review CIT Analysis' },
-  { icon: <FaCheckCircle />, label: 'Upload Documents' },
-  { icon: <FaFileSignature />, label: 'Prepare Documents' },
-  { icon: <FaArrowRight />, label: 'Download Result' },
+    { number: '1', label: 'Required Docs' },
+    { number: '2', label: 'Upload Documents' },
+    { number: '3', label: 'Processing' },
+    { number: '4', label: 'CIT Report' },
 ];
 
 export default function CorporateIncomeTax() {
@@ -118,7 +118,7 @@ export default function CorporateIncomeTax() {
   const [existingAnalysis, setExistingAnalysis] = useState(null);
   const [isCheckingExisting, setIsCheckingExisting] = useState(true);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
-  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+
   const [showFileUploadModal, setShowFileUploadModal] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalChecked, setApprovalChecked] = useState(false);
@@ -139,16 +139,11 @@ export default function CorporateIncomeTax() {
           navigate('/financial-hub');
           break;
         case 'Trial Balance':
-          navigate('/financial-hub?tab=accounting');
-          break;
         case 'Balance Sheet':
-          navigate('/financial-hub?tab=statements');
-          break;
         case 'Cashflow Statement':
-          navigate('/financial-hub?tab=cashflow');
-          break;
         case 'Profit and Loss Statement':
-          navigate('/financial-hub?tab=profit-loss');
+          // These documents don't redirect anywhere - just show info
+          console.log(`Document clicked: ${documentTitle}`);
           break;
         default:
           console.log(`Navigation not implemented for: ${documentTitle}`);
@@ -402,11 +397,53 @@ export default function CorporateIncomeTax() {
 
   const startNewAnalysis = () => {
     setExistingAnalysis(null);
-    setStep(0);
+    setStep(0); // Start from step 0 (Required Documents) to show requirements first
     setProcessedResult(null);
     setUploadedFiles([]);
     setUploadError('');
     setUploadSuccess('');
+  };
+
+  const viewSavedAnalysis = async () => {
+    try {
+      if (!userId) {
+        setUploadError('User not authenticated');
+        return;
+      }
+
+      // Always fetch fresh data from database
+      const { data, error } = await supabase
+        .from('corporate_tax_analysis')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Database error:', error);
+        setUploadError('Database error. Please try again.');
+        return;
+      }
+
+      if (data && data.length > 0) {
+        console.log('Found analysis in database:', data[0]);
+        setExistingAnalysis(data[0]);
+        
+        // Clear any existing processed result to ensure we show the saved analysis
+        setProcessedResult(null);
+        
+        // Go directly to step 4 where the existing analysis will be displayed
+        setStep(4);
+        
+        // Clear any upload errors
+        setUploadError('');
+      } else {
+        setUploadError('No saved analysis found. Please process documents first.');
+      }
+    } catch (error) {
+      console.error('Error loading saved analysis:', error);
+      setUploadError('Unable to load saved analysis. Please try again.');
+    }
   };
 
   const deleteExistingAnalysis = async () => {
@@ -440,24 +477,7 @@ export default function CorporateIncomeTax() {
     }
   };
 
-  // Function to create sample analysis data for testing
-  const createSampleAnalysis = () => {
-    const sampleData = {
-      id: 'sample-123',
-      user_id: userId || 'test-user',
-      company_name: 'Stichting V.F.F.V.',
-      fiscal_year: '2024',
-      total_revenue: 0,
-      total_expenses: 77279222.77,
-      taxable_income: -77279222.77,
-      final_tax_owed: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    setExistingAnalysis(sampleData);
-    console.log('Sample analysis created:', sampleData);
-    return sampleData;
-  };
+
 
   const handleFileUpload = async (event) => {
     console.log('File upload triggered');
@@ -567,12 +587,90 @@ export default function CorporateIncomeTax() {
 
 
 
-  const handleViewFile = (file) => {
+  const handleViewFile = async (file) => {
+    try {
+      if (file.isStorageReference && file.file_path) {
+        // Handle imported documents from Financial Hub
+        console.log('Viewing imported document from storage:', file);
+        
+        let filePath = file.file_path;
+        let bucket = file.storage_bucket || 'reports';
+        
+        // Remove any leading slashes to prevent double slashes in the path
+        filePath = filePath.replace(/^\/+/, '');
+        
+        console.log('Attempting to view file from storage:', { bucket, filePath });
+
+        const { data: signedUrlData, error } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+        if (error) {
+          console.error('Error creating signed URL:', error);
+          throw error;
+        }
+
+        if (!signedUrlData?.signedUrl) {
+          throw new Error('No signed URL received');
+        }
+
+        console.log('Successfully generated signed URL for imported document');
+        window.open(signedUrlData.signedUrl, '_blank');
+      } else if (file.file) {
+        // Handle local uploaded files
     const url = URL.createObjectURL(file.file);
     window.open(url, '_blank');
+      } else {
+        throw new Error('No file data available for viewing');
+      }
+    } catch (error) {
+      console.error('Error viewing file:', error);
+      alert(`Unable to view file: ${error.message || 'Please try again later.'}`);
+    }
   };
 
-  const handleDownloadFile = (file) => {
+  const handleDownloadFile = async (file) => {
+    try {
+      if (file.isStorageReference && file.file_path) {
+        // Handle imported documents from Financial Hub
+        console.log('Downloading imported document from storage:', file);
+        
+        let filePath = file.file_path;
+        let bucket = file.storage_bucket || 'reports';
+        
+        // Remove any leading slashes to prevent double slashes in the path
+        filePath = filePath.replace(/^\/+/, '');
+        
+        console.log('Attempting to download file from storage:', { bucket, filePath });
+
+        // First try to get a download URL
+        const { data: downloadData, error: downloadError } = await supabase.storage
+          .from(bucket)
+          .download(filePath);
+
+        if (downloadError) {
+          console.error('Error downloading file from storage:', downloadError);
+          throw downloadError;
+        }
+
+        if (!downloadData) {
+          throw new Error('No file data received from storage');
+        }
+
+        // Create a blob URL and trigger download
+        const blob = new Blob([downloadData], { type: 'application/octet-stream' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.name || 'document';
+        document.body.appendChild(link);
+        link.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        
+        console.log('File download from storage initiated successfully');
+      } else if (file.file) {
+        // Handle local uploaded files
     const url = URL.createObjectURL(file.file);
     const link = document.createElement('a');
     link.href = url;
@@ -581,6 +679,13 @@ export default function CorporateIncomeTax() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+      } else {
+        throw new Error('No file data available for download');
+      }
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      alert(`Unable to download file: ${error.message || 'Please try again later.'}`);
+    }
   };
 
   
@@ -627,7 +732,7 @@ export default function CorporateIncomeTax() {
           console.log(`📋 Filtered to ${filteredData.length} documents of type: ${selectedDocumentType}`);
         }
 
-        // Create file objects directly from Financial Hub data (bypassing storage download issues)
+      // Create file objects directly from Financial Hub data with proper storage references
         const loadedFiles = [];
         
         for (const doc of filteredData) {
@@ -640,42 +745,25 @@ export default function CorporateIncomeTax() {
             continue;
           }
           
-          // Create a simple placeholder file with document info
-          const documentContent = `Financial Hub Document: ${doc.doc_type}
-File: ${fileName}
-Year: ${doc.year}
-Source: Financial Hub (table_reports)
-Document ID: ${doc.id}
-
-This document was loaded from your Financial Hub and contains your ${doc.doc_type} data for ${doc.year}.`;
-          
-          const fileBlob = new Blob([documentContent], { type: 'text/plain' });
-          const file = new File([fileBlob], fileName, { type: 'application/pdf' });
-          
-          // Map document type
-          const docTypeMapping = {
-            'Financial Statement': 'financial_statement',
-            'Trial Balance': 'trial_balance',
-            'Balance Sheet': 'balance_sheet',
-            'Profit & Loss Statement': 'profit_loss_statement',
-            'Cash Flow': 'cash_flow'
-          };
-          const mappedDocType = docTypeMapping[doc.doc_type] || 'financial_statement';
-          
+        // Create a file object that maintains the original storage reference
           const newFile = {
             id: Date.now() + Math.random(),
             name: fileName,
-            size: file.size,
+          size: doc.file_size || 0,
             type: 'application/pdf',
-            file: file,
-            uploadedAt: new Date().toLocaleString(),
-            documentType: mappedDocType,
+          file: null, // No actual file object since we're referencing storage
+          uploadedAt: new Date(doc.created_at).toLocaleString(),
+          documentType: doc.doc_type,
             source: 'financial_hub',
-            originalData: doc // Store original Financial Hub data
+          originalData: doc, // Store original Financial Hub data
+          // Storage information for view/download
+          file_path: doc.file_path,
+          storage_bucket: doc.storage_bucket || 'reports',
+          isStorageReference: true // Flag to indicate this is a storage reference
           };
           
           loadedFiles.push(newFile);
-          console.log(`✅ Loaded ${fileName} (${doc.doc_type})`);
+        console.log(`✅ Loaded ${fileName} (${doc.doc_type}) with storage reference`);
         }
 
               if (loadedFiles.length > 0) {
@@ -747,22 +835,89 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
 
       console.log('Sending files to backend:', uploadedFiles.map(f => `${f.name} (${f.documentType})`));
 
-      const response = await fetch('https://corporate-tax-analyser.onrender.com/analyze-intelligent', {
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
+
+      // Try multiple approaches to bypass CORS and server issues
+      let response;
+      let attempt = 0;
+      const maxAttempts = 3;
+      
+      const endpoints = [
+        'https://corporate-tax-analyser.onrender.com/analyze-intelligent',
+        'https://cors-anywhere.herokuapp.com/https://corporate-tax-analyser.onrender.com/analyze-intelligent',
+        'https://api.allorigins.win/raw?url=https://corporate-tax-analyser.onrender.com/analyze-intelligent'
+      ];
+      
+      while (attempt < maxAttempts) {
+        try {
+          attempt++;
+          const currentEndpoint = endpoints[attempt - 1] || endpoints[0];
+          
+          if (currentEndpoint.includes('cors-anywhere') || currentEndpoint.includes('allorigins')) {
+            // For proxy endpoints, we need to handle differently
+            const proxyUrl = currentEndpoint.includes('cors-anywhere') 
+              ? 'https://cors-anywhere.herokuapp.com/https://corporate-tax-analyser.onrender.com/analyze-intelligent'
+              : 'https://api.allorigins.win/raw?url=https://corporate-tax-analyser.onrender.com/analyze-intelligent';
+              
+            response = await fetch(proxyUrl, {
+              method: 'POST',
+              body: formData,
+              signal: controller.signal,
+              headers: {
+                'Accept': 'application/json',
+                'Origin': 'http://localhost:3000',
+                'X-Requested-With': 'XMLHttpRequest'
+              }
+            });
+          } else {
+            // Direct API call
+            response = await fetch(currentEndpoint, {
         method: 'POST',
         body: formData,
         mode: 'cors',
+              signal: controller.signal,
         headers: {
           'Accept': 'application/json',
         },
-      });
+              credentials: 'omit',
+            });
+          }
+          
+          // If we get here, the request succeeded
+          break;
+        } catch (fetchError) {
+          if (attempt >= maxAttempts) {
+            throw fetchError;
+          }
+          
+          // Wait before retry with increasing delay
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        }
+      }
 
-      console.log('Response status:', response.status);
+            clearTimeout(timeoutId);
+      
+      // Response received successfully
+      
+      // Check for invalid response (HTTP 0 indicates CORS blocking)
+      if (response.status === 0) {
+        throw new Error('CORS Error: Request was blocked by browser security policy. The server is not sending proper CORS headers.');
+      }
+      
+      // If all attempts failed, provide a fallback response
+      if (!response || response.status >= 400) {
+        // Don't show fake data - show error instead
+        setUploadError('Unable to connect to the analysis server. Please check your internet connection and try again.');
+        setStep(2);
+        return;
+      }
 
       if (!response.ok) {
         // Handle different HTTP status codes
         if (response.status === 500) {
         const errorText = await response.text();
-          console.log('Server error response:', errorText);
           
           // Try to parse as JSON, fallback to text
           let errorMessage = 'Server error occurred';
@@ -778,10 +933,13 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
             data: { detail: errorMessage },
             status: response.status
           });
-          
           setStep(2);
           setUploadSuccess('Response received from server');
         return;
+        } else if (response.status === 429) {
+          setUploadError('Server is busy. Please wait a moment and try again.');
+        } else if (response.status === 413) {
+          setUploadError('Files are too large. Please reduce file size and try again.');
         } else {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -789,7 +947,22 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
 
       // Try to get the response as JSON
       const result = await response.json();
-      console.log('API Response:', result);
+      
+      console.log('🎯 API Response received:', result);
+      console.log('📊 Response structure:', {
+        hasGeneralInfo: !!result.general_information,
+        hasTaxReturnSummary: !!result.tax_return_summary,
+        hasBreakdown: !!result.tax_return_summary?.breakdown,
+        hasFileMetadata: !!result.file_metadata,
+        hasAuditFlags: !!result.audit_flags
+      });
+      console.log('🔍 Full response keys:', Object.keys(result));
+      console.log('🔍 Breakdown keys:', Object.keys(result.tax_return_summary?.breakdown || {}));
+      console.log('💰 Sample values:', {
+        revenue: result.tax_return_summary?.breakdown?.Revenue,
+        expenses: result.tax_return_summary?.breakdown?.Expenses,
+        taxableIncome: result.tax_return_summary?.breakdown?.['Taxable Income']
+      });
 
       // Store the result to display in the UI
       setProcessedResult({
@@ -798,21 +971,25 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
         status: response.status
       });
 
-      setStep(2); // Move to "Prepare Documents" step
-      setUploadSuccess('Analysis completed!');
+      setStep(4); // Go to step 4 where the actual financial report is displayed
+      setUploadSuccess('Analysis completed! Report is ready.');
       
     } catch (error) {
       console.error('Error processing documents:', error);
       
-      // Handle different types of errors
-      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-        setUploadError('Network error: Unable to connect to the analysis server. Please check your internet connection and try again.');
-      } else if (error.message.includes('CORS')) {
-        setUploadError('Connection error: Cross-origin request blocked. Please contact support.');
-      } else if (error.message.includes('timeout')) {
+      // Clean, user-friendly error handling
+      if (error.name === 'AbortError') {
         setUploadError('Request timeout: The server took too long to respond. Please try again.');
+      } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        if (error.message.includes('CORS') || error.message.includes('blocked by CORS policy')) {
+          setUploadError('Connection blocked by security policy. Please try again later or contact support if the issue persists.');
       } else {
-        setUploadError(`Error: ${error.message}`);
+          setUploadError('Unable to connect to the server. Please check your internet connection and try again.');
+        }
+      } else if (error.message.includes('CORS')) {
+        setUploadError('Connection blocked by security policy. Please try again later.');
+      } else {
+        setUploadError('An unexpected error occurred. Please try again.');
       }
     } finally {
       setIsProcessing(false);
@@ -837,12 +1014,14 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
 
   const formatCurrency = (amount) => {
     if (typeof amount === 'number') {
-      return new Intl.NumberFormat('en-US', {
+      return new Intl.NumberFormat('de-DE', {
         style: 'currency',
-        currency: 'USD'
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
       }).format(amount);
     }
-    return '$0.00';
+    return '€0.00';
   };
 
   const validateExtractedData = (data) => {
@@ -876,26 +1055,38 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
   };
 
   const formatReportData = (data) => {
-    // Extract company and fiscal year from general_information
+    console.log('🔍 Raw data received in formatReportData:', data);
+    console.log('🔍 Data type:', typeof data);
+    console.log('🔍 Data keys:', Object.keys(data || {}));
+    
+    // Simple direct extraction from backend API response
     const generalInfo = data.general_information || {};
     const companyName = generalInfo.company_name || 'Unknown Company';
     const fiscalYear = generalInfo.fiscal_year || new Date().getFullYear();
     
-    // Extract financial data from tax_return_summary.breakdown
+    console.log('📋 General Info:', generalInfo);
+    console.log('📋 Company Name:', companyName);
+    console.log('📋 Fiscal Year:', fiscalYear);
+    
+    // Extract financial data directly from breakdown
     const breakdown = data.tax_return_summary?.breakdown || {};
-    const revenue = parseFloat(breakdown.Revenue || 0);
-    const expenses = parseFloat(breakdown.Expenses || 0);
-    const depreciation = parseFloat(breakdown.Depreciation || 0);
-    const deductions = parseFloat(breakdown.Deductions || 0);
-    const taxableIncome = parseFloat(breakdown['Taxable Income'] || 0);
+    console.log('💰 Breakdown data:', breakdown);
+    console.log('💰 Breakdown keys:', Object.keys(breakdown));
     
-    // Handle tax rate (remove % sign and convert to decimal)
-    const taxRateString = breakdown['Applied Tax Rate'] || '0%';
-    const taxRate = parseFloat(taxRateString.replace('%', '')) / 100;
+    // Just get the raw values as they come from backend
+    const revenue = breakdown.Revenue || 0;
+    const expenses = breakdown.Expenses || 0;
+    const depreciation = breakdown.Depreciation || 0;
+    const deductions = breakdown.Deductions || 0;
+    const taxableIncome = breakdown['Taxable Income'] || 0;
+    const taxRate = breakdown['Applied Tax Rate'] || '0%';
+    const finalTaxOwed = breakdown['Final Tax Owed'] || 0;
     
-    const finalTaxOwed = parseFloat(breakdown['Final Tax Owed'] || 0);
+    console.log('💵 Extracted values:', {
+      revenue, expenses, depreciation, deductions, taxableIncome, taxRate, finalTaxOwed
+    });
     
-    // Extract documents from file_metadata
+    // Extract documents
     const documents = (data.file_metadata || []).map(file => ({
       filename: file.filename,
       type: file.type,
@@ -903,20 +1094,15 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
       fiscal_year: file.fiscal_year_detected
     }));
     
-    // Extract observations from audit_flags
+    // Extract observations
     const observations = data.audit_flags || [];
     
-    // Generate recommendations based on the data
-    const recommendations = [];
-    if (revenue === 0 && expenses > 0) {
-      recommendations.push('Investigate why revenue is reported as $0 while expenses are significant.');
-    }
-    if (depreciation === 0) {
-      recommendations.push('Review depreciation schedule for accuracy and completeness.');
-    }
-    if (documents.length > 0) {
-      recommendations.push('Validate supporting documents for any missing or misclassified items.');
-    }
+    // Simple recommendations
+    const recommendations = [
+      'Review the generated report for accuracy',
+      'Validate supporting documents',
+      'Consult with tax professional if needed'
+    ];
     
     const extractedData = {
       companyName,
@@ -933,81 +1119,97 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
       recommendations
     };
     
-    // Validate the extracted data
-    const validationIssues = validateExtractedData(extractedData);
-    if (validationIssues.length > 0) {
-      console.warn('⚠️ Data validation warnings:', validationIssues);
-    }
-
+    console.log('✅ Final extracted data:', extractedData);
     return extractedData;
   };
 
-  const generatePDFReport = (data) => {
-    const reportData = formatReportData(data);
+  const generatePDFReport = async (data) => {
+    console.log('PDF Function - Data received:', data);
+    console.log('PDF Function - Data structure:', {
+      hasGeneralInfo: !!data?.general_information,
+      hasTaxSummary: !!data?.tax_return_summary,
+      hasBreakdown: !!data?.tax_return_summary?.breakdown,
+      companyName: data?.general_information?.company_name,
+      fiscalYear: data?.general_information?.fiscal_year,
+      revenue: data?.tax_return_summary?.breakdown?.Revenue,
+      expenses: data?.tax_return_summary?.breakdown?.Expenses
+    });
+    
     const doc = new jsPDF();
     
     // Set up document
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('Corporate Analysis Report', 20, 30);
+    doc.text('Corporate Income Tax Analysis Report', 20, 30);
     
     let yPosition = 50;
-    
-    // Executive Summary
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('1. Executive Summary', 20, yPosition);
-    yPosition += 10;
-    
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    const summaryText = `This report summarizes the key financial metrics and observations for ${reportData.companyName} for the fiscal year ${reportData.fiscalYear}, based on the provided documents and extracted data.`;
-    const summaryLines = doc.splitTextToSize(summaryText, 170);
-    doc.text(summaryLines, 20, yPosition);
-    yPosition += summaryLines.length * 5 + 10;
     
     // Company & Fiscal Information
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('2. Company & Fiscal Information', 20, yPosition);
+    doc.text('1. Company & Fiscal Information', 20, yPosition);
     yPosition += 10;
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Company Name: ${reportData.companyName}`, 20, yPosition);
+    
+    // Extract company info from the correct structure (database format)
+    const companyName = data?.company_name || data?.general_information?.company_name || 'N/A';
+    const fiscalYear = data?.fiscal_year || data?.general_information?.fiscal_year || 'N/A';
+    
+    doc.text(`Company Name: ${companyName}`, 20, yPosition);
     yPosition += 7;
-    doc.text(`Fiscal Year: ${reportData.fiscalYear}`, 20, yPosition);
+    doc.text(`Fiscal Year: ${fiscalYear}`, 20, yPosition);
     yPosition += 15;
     
     // Financial Breakdown
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('3. Financial Breakdown', 20, yPosition);
+    doc.text('2. Financial Breakdown', 20, yPosition);
     yPosition += 10;
     
-    // Create table-like structure for financial data
+    // Extract financial data from database structure (top level)
+    const revenue = data?.revenue || data?.tax_return_summary?.breakdown?.Revenue || 0;
+    const expenses = data?.expenses || data?.tax_return_summary?.breakdown?.Expenses || 0;
+    const depreciation = data?.depreciation || data?.tax_return_summary?.breakdown?.Depreciation || 0;
+    const deductions = data?.deductions || data?.tax_return_summary?.breakdown?.Deductions || 0;
+    const taxableIncome = data?.taxable_income || data?.tax_return_summary?.breakdown?.['Taxable Income'] || 0;
+    const appliedTaxRate = data?.applied_tax_rate || data?.tax_return_summary?.breakdown?.['Applied Tax Rate'] || '0%';
+    const finalTaxOwed = data?.final_tax_owed || data?.tax_return_summary?.breakdown?.['Final Tax Owed'] || 0;
+    
+    // Create table-like structure for financial data with proper spacing
     const financialData = [
-      ['Revenue', formatCurrency(reportData.revenue)],
-      ['Expenses', formatCurrency(reportData.expenses)],
-      ['Depreciation', formatCurrency(reportData.depreciation)],
-      ['Deductions', formatCurrency(reportData.deductions)],
-      ['Taxable Income', formatCurrency(reportData.taxableIncome)],
-      ['Applied Tax Rate', `${(reportData.taxRate * 100).toFixed(1)}%`],
-      ['Final Tax Owed', formatCurrency(reportData.finalTaxOwed)]
+      ['Revenue', revenue ? `€${Number(revenue).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '€0.00'],
+      ['Expenses', expenses ? `€${Number(expenses).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '€0.00'],
+      ['Depreciation', depreciation ? `€${Number(depreciation).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '€0.00'],
+      ['Deductions', deductions ? `€${Number(deductions).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '€0.00'],
+      ['Taxable Income', taxableIncome ? `€${Number(taxableIncome).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '€0.00'],
+      ['Applied Tax Rate', appliedTaxRate],
+      ['Final Tax Owed', finalTaxOwed ? `€${Number(finalTaxOwed).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '€0.00']
     ];
     
+    // Calculate column widths for better alignment
+    const labelWidth = 100;
+    const valueWidth = 60;
+    const startX = 20;
+    const valueX = startX + labelWidth;
+    
     doc.setFontSize(12);
+    financialData.forEach(([label, value], index) => {
+      // Draw label
     doc.setFont('helvetica', 'normal');
-    financialData.forEach(([label, value]) => {
-      doc.text(`${label}:`, 20, yPosition);
-      doc.text(value, 120, yPosition);
+      doc.text(`${label}:`, startX, yPosition);
+      
+      // Draw value with proper alignment
       if (label === 'Taxable Income') {
         doc.setFont('helvetica', 'bold');
-        doc.text(`${label}:`, 20, yPosition);
-        doc.text(value, 120, yPosition);
+        doc.text(value, valueX, yPosition);
         doc.setFont('helvetica', 'normal');
+      } else {
+        doc.text(value, valueX, yPosition);
       }
-      yPosition += 7;
+      
+      yPosition += 8; // Increased spacing between rows
     });
     
     yPosition += 10;
@@ -1021,17 +1223,17 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
     // Documents Reviewed
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('4. Documents Reviewed', 20, yPosition);
+    doc.text('3. Documents Reviewed', 20, yPosition);
     yPosition += 10;
     
-    if (reportData.documents && reportData.documents.length > 0) {
+    if (data?.file_metadata && data.file_metadata.length > 0) {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
-      reportData.documents.forEach((doc_item, index) => {
-        const filename = doc_item.filename || `Document ${index + 1}`;
-        const type = doc_item.type || 'OTHER';
-        const company = doc_item.company_detected || reportData.companyName;
-        const year = doc_item.fiscal_year || reportData.fiscalYear;
+      data.file_metadata.forEach((file, index) => {
+        const filename = file.filename || `Document ${index + 1}`;
+        const type = file.type || 'OTHER';
+        const company = file.company_name_detected || companyName;
+        const year = file.fiscal_year_detected || fiscalYear;
         
         doc.text(`${filename}`, 20, yPosition);
         yPosition += 5;
@@ -1046,25 +1248,25 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
     } else {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
-      doc.text('No specific document details available in the analysis.', 20, yPosition);
+      doc.text('No specific document details available.', 20, yPosition);
       yPosition += 10;
     }
     
     yPosition += 10;
     
-    // Observations & Notes
+    // Audit Flags & Observations
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('5. Observations & Notes', 20, yPosition);
+    doc.text('4. Audit Flags & Observations', 20, yPosition);
     yPosition += 10;
     
-    if (reportData.observations && reportData.observations.length > 0) {
+    if (data?.audit_flags && data.audit_flags.length > 0) {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
-      reportData.observations.forEach((observation) => {
-        const obsLines = doc.splitTextToSize(`• ${observation}`, 170);
-        doc.text(obsLines, 20, yPosition);
-        yPosition += obsLines.length * 5 + 3;
+      data.audit_flags.forEach((flag) => {
+        const flagLines = doc.splitTextToSize(`• ${flag}`, 170);
+        doc.text(flagLines, 20, yPosition);
+        yPosition += flagLines.length * 5 + 3;
         
         if (yPosition > 250) {
           doc.addPage();
@@ -1074,13 +1276,13 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
     } else {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
-      doc.text('• Depreciation not found and no specific schedule was provided. Assumed to be zero.', 20, yPosition);
+      doc.text('• No specific audit flags or observations noted.', 20, yPosition);
       yPosition += 10;
     }
     
     yPosition += 10;
     
-    // Recommendations
+    // Summary
     if (yPosition > 230) {
       doc.addPage();
       yPosition = 30;
@@ -1088,46 +1290,261 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
     
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('6. Recommendations', 20, yPosition);
+    doc.text('5. Summary', 20, yPosition);
     yPosition += 10;
     
-    const defaultRecommendations = [
-      'Review depreciation schedule for accuracy and completeness.',
-      'Investigate why revenue is reported as $0 while expenses are significant.',
-      'Validate supporting documents for any missing or misclassified items.'
-    ];
+    const summaryText = `This analysis report provides a comprehensive overview of the financial data for ${companyName} for the fiscal year ${fiscalYear}. The report includes revenue, expenses, taxable income calculations, and final tax obligations based on the provided financial documents.`;
     
-    const recsToShow = reportData.recommendations.length > 0 ? reportData.recommendations : defaultRecommendations;
-    
+    const summaryLines = doc.splitTextToSize(summaryText, 170);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    recsToShow.forEach((recommendation) => {
-      const recLines = doc.splitTextToSize(`• ${recommendation}`, 170);
-      doc.text(recLines, 20, yPosition);
-      yPosition += recLines.length * 5 + 3;
-      
-      if (yPosition > 250) {
-        doc.addPage();
-        yPosition = 30;
-      }
-    });
+    doc.text(summaryLines, 20, yPosition);
     
-    // Save the PDF
-    const fileName = `CIT_Analysis_Report_${reportData.companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${reportData.fiscalYear}_${new Date().toISOString().split('T')[0]}.pdf`;
+    try {
+      // Generate PDF blob
+      const pdfBlob = doc.output('blob');
+    const fileName = `CIT_Analysis_Report_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${fiscalYear}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Save to Supabase storage
+      if (userId) {
+        const filePath = `${userId}/${Date.now()}_${fileName}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('corporate-tax-reports')
+          .upload(filePath, pdfBlob, {
+            contentType: 'application/pdf',
+            cacheControl: '3600'
+          });
+        
+        if (uploadError) {
+          console.error('Error uploading PDF to storage:', uploadError);
+          // Fallback to local download
     doc.save(fileName);
+          return;
+        }
+        
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('corporate-tax-reports')
+          .getPublicUrl(filePath);
+        
+        if (urlData?.publicUrl) {
+          // Update the analysis record with the report URL
+          await updateAnalysisWithReportUrl(urlData.publicUrl);
+          
+          // Show success message
+          alert(`PDF report generated and saved successfully!\nReport URL: ${urlData.publicUrl}`);
+          
+          // Open the report in new tab
+          window.open(urlData.publicUrl, '_blank');
+        } else {
+          // Fallback to local download
+          doc.save(fileName);
+        }
+      } else {
+        // Fallback to local download if user not authenticated
+        doc.save(fileName);
+      }
+    } catch (error) {
+      console.error('Error saving PDF to storage:', error);
+      // Fallback to local download
+      const fileName = `CIT_Analysis_Report_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${fiscalYear}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+    }
   };
 
   const downloadAnalysisReport = (data) => {
     generatePDFReport(data);
   };
 
+  // Function to update analysis record with report URL
+  const updateAnalysisWithReportUrl = async (reportUrl) => {
+    try {
+      if (!userId) {
+        console.warn('User not authenticated, cannot update analysis');
+        return;
+      }
+
+      // Find the most recent analysis for this user
+      const { data: analysisData, error } = await supabase
+        .from('corporate_tax_analysis')
+        .select('id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error fetching analysis data:', error);
+        return;
+      }
+
+      if (analysisData && analysisData.length > 0) {
+        // Update the analysis record with the report URL
+        const { error: updateError } = await supabase
+          .from('corporate_tax_analysis')
+          .update({ report_url: reportUrl })
+          .eq('id', analysisData[0].id);
+
+        if (updateError) {
+          console.error('Error updating analysis with report URL:', updateError);
+        } else {
+          console.log('Analysis updated with report URL successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error in updateAnalysisWithReportUrl:', error);
+    }
+  };
+
+  // Function to copy objection letter template to clipboard with company mapping
+  const copyObjectionLetterToClipboard = async () => {
+    try {
+      // Get company details from existing analysis or use defaults
+      const companyName = existingAnalysis?.company_name || 'Stichting V.F.F.V.';
+      const fiscalYear = existingAnalysis?.fiscal_year || '2024';
+      const currentDate = new Date().toLocaleDateString('en-GB');
+      const assessmentDate = new Date().toLocaleDateString('en-GB');
+      
+      // Create the objection letter template with company mapping
+      const objectionLetterTemplate = `Objection Letter Template: Corporate Tax Assessment ${fiscalYear}
+
+[Company Letterhead]
+Belastingdienst
+[Relevant Tax Office Address]
+[Postal Code and City]
+The Netherlands
+
+Date: ${currentDate}
+Subject: Notice of Objection (Bezwaarschrift) - Corporate Tax Assessment ${fiscalYear}
+Tax Reference Number: [Insert Reference Number]
+RSIN/KVK Number: [Insert Company Registration Number]
+Tax Year: ${fiscalYear}
+Assessment Date: ${assessmentDate}
+
+Dear Sir/Madam,
+
+1. Formal Notice of Objection
+In accordance with Article 6:4 of the General Administrative Law Act (Algemene wet bestuursrecht) and Article 26 of the General State Taxes Act (Algemene wet inzake rijksbelastingen), I hereby formally submit an objection to the corporate tax assessment referenced above, issued on ${assessmentDate}.
+
+2. Company Details
+Legal Name: ${companyName}
+Trading Name: [If different from legal name]
+Legal Form: [BV, NV, etc.]
+Address: [Registered Office Address]
+RSIN: [Tax Identification Number]
+KVK Number: [Chamber of Commerce Registration Number]
+Authorized Representative: [Name and Position]
+Contact Information: [Phone, Email]
+
+3. Objection Details
+
+3.1 Specific Aspects of the Assessment Being Contested
+I/We object to the following specific aspects of the corporate tax assessment:
+1. [Specific item 1, e.g., "The disallowance of €XX,XXX in R&D expenses under the innovation box regime"]
+2. [Specific item 2, e.g., "The characterization of income in the amount of €XX,XXX as regular taxable profit rather than as qualifying for the participation exemption"]
+3. [Add additional items as necessary]
+
+3.2 Factual Background
+[Provide a clear, concise explanation of the relevant facts pertaining to your corporate tax situation for the ${fiscalYear} tax year. Include key dates, transactions, business activities, and any other relevant information.]
+
+3.3 Grounds for Objection
+
+Legal Grounds
+The assessment is incorrect based on the following legal grounds:
+1. First Objection Point:
+   ○ Relevant Law: [e.g., "Article 12b of the Corporate Income Tax Act 1969 (Wet op de vennootschapsbelasting 1969)"]
+   ○ Explanation: [Detailed explanation of why the tax authority's position is incorrect based on the law]
+   ○ Correct Application: [Explanation of how the law should be correctly applied in this instance]
+2. Second Objection Point:
+   ○ Relevant Law: [Cite relevant article]
+   ○ Explanation: [Detailed explanation]
+   ○ Correct Application: [Explanation]
+3. [Add additional objection points as necessary]
+
+Factual Grounds
+The assessment contains the following factual errors:
+1. [Detail factual error 1]
+2. [Detail factual error 2]
+3. [Add additional factual errors as necessary]
+
+3.4 Correct Tax Position
+Based on the legal and factual grounds stated above, the correct tax position should be:
+● Taxable amount as per assessment: €[Amount]
+● Correct taxable amount: €[Amount]
+● Difference: €[Amount]
+
+4. Supporting Documentation
+In support of this objection, I/we enclose the following documentation:
+1. [List document 1, e.g., "Copy of the contested tax assessment"]
+2. [List document 2, e.g., "Financial statements for fiscal year ${fiscalYear}"]
+3. [List document 3, e.g., "Documentation supporting R&D expenses"]
+4. [Add additional documents as necessary]
+
+5. Request for Suspension of Payment
+Pursuant to Article 25 of the Tax Collection Act (Invorderingswet), I/we request suspension of payment for the contested amount until a decision on this objection has been made.
+
+6. Request for Oral Hearing
+Pursuant to Article 7:2 of the General Administrative Law Act, I/we request an opportunity to be heard in person regarding this objection before a decision is made.
+
+7. Request for Decision
+I/we respectfully request that the Tax Administration:
+1. Consider this objection valid and submitted within the statutory time limit;
+2. Grant the suspension of payment for the contested amount;
+3. Schedule an oral hearing to discuss this objection;
+4. Issue a revised assessment in accordance with the correct tax position as outlined above; and
+5. Reimburse any overpaid taxes with statutory interest.
+
+Should you require any additional information or clarification, please do not hesitate to contact me/us using the contact details provided above.
+
+Thank you for your attention to this matter.
+
+Yours faithfully,
+
+[Signature]
+[Name of Authorized Representative]
+[Position]
+${companyName}
+
+Enclosures:
+1. [List of enclosed documents]
+2. [Power of attorney, if applicable]
+
+________________________________________
+Note: This objection letter has been filed within the statutory period of six weeks from the date of the assessment, as required by Article 6:7 of the General Administrative Law Act.`;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(objectionLetterTemplate);
+      
+      // Show success message
+      setUploadSuccess('Objection letter template copied to clipboard with company details!');
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setUploadSuccess(''), 3000);
+      
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      setUploadError('Failed to copy objection letter template. Please try again.');
+      
+      // Clear error message after 3 seconds
+      setTimeout(() => setUploadError(''), 3000);
+    }
+  };
+
   // Show loading state while checking for existing analysis
   if (isCheckingExisting) {
     return (
-      <div style={{ minHeight: '100vh', background: '#220938', color: '#fff', padding: '2rem' }}>
+      <div style={{ minHeight: '100vh', background: '#0f172a', color: '#fff', padding: '2rem' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
           <div style={{ textAlign: 'center' }}>
-            <FaSpinner style={{ fontSize: '3rem', color: '#3b82f6', animation: 'spin 1s linear infinite' }} />
+            <div style={{ 
+              width: '60px', 
+              height: '60px', 
+              border: '4px solid rgba(59, 130, 246, 0.3)', 
+              borderTop: '4px solid #3b82f6', 
+              borderRadius: '50%', 
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto'
+            }}></div>
             <h2 style={{ marginTop: '1rem', color: '#fff' }}>Checking Your Corporate Tax Status...</h2>
             <p style={{ color: '#bfc9da' }}>Please wait while we verify your account</p>
           </div>
@@ -1137,7 +1554,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#220938', color: '#fff', padding: '1rem' }}>
+    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#fff', padding: '1rem' }}>
       {/* Processing Modal */}
       {isProcessing && (
         <div style={{
@@ -1146,7 +1563,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
+          background: 'rgba(15, 23, 42, 0.95)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
@@ -1154,20 +1571,20 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
           backdropFilter: 'blur(4px)'
         }}>
           <div style={{
-            background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+            background: '#0f172a',
             borderRadius: '20px',
             padding: '3rem 2.5rem',
             textAlign: 'center',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.8)',
+            border: '1px solid #1e293b',
             maxWidth: '400px',
             width: '90%'
           }}>
             <div style={{
               width: '80px',
               height: '80px',
-              border: '4px solid rgba(255, 255, 255, 0.3)',
-              borderTop: '4px solid #ffffff',
+              border: '4px solid rgba(59, 130, 246, 0.3)',
+              borderTop: '4px solid #3b82f6',
               borderRadius: '50%',
               animation: 'spin 1s linear infinite',
               margin: '0 auto 2rem auto',
@@ -1207,9 +1624,9 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     width: '8px',
                     height: '8px',
                     borderRadius: '50%',
-                    background: 'rgba(255, 255, 255, 0.7)',
+                    background: 'rgba(59, 130, 246, 0.7)',
                     animation: `pulse 1.5s ease-in-out ${i * 0.2}s infinite`,
-                    filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.5))'
+                    filter: 'drop-shadow(0 0 4px rgba(59, 130, 246, 0.5))'
                   }}
                 ></div>
               ))}
@@ -1235,39 +1652,61 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
         </div>
 
         {/* Progress Steps */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', gap: '0.5rem' }}>
           {steps.map((stepItem, index) => (
-            <div key={index} style={{ display: 'flex', alignItems: 'center' }}>
               <div 
+              key={index} 
                 onClick={() => handleStepClick(index)}
                 style={{
                   display: 'flex',
+                flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: step >= index ? 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)' : '#374151',
-                  color: '#fff',
-                  fontSize: '1rem',
-                  marginRight: index < steps.length - 1 ? '0.5rem' : '0',
-                  cursor: index <= step || index === step + 1 ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.2s ease',
-                  boxShadow: step >= index ? '0 4px 12px rgba(30, 58, 138, 0.4)' : 'none',
-                  border: step === index ? '2px solid #60a5fa' : 'none'
-                }}
-              >
-                {stepItem.icon}
-            </div>
-              {index < steps.length - 1 && (
+                cursor: index <= step ? 'pointer' : 'not-allowed',
+                padding: '0.25rem',
+                borderRadius: '4px',
+                background: index <= step ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'rgba(15, 23, 42, 0.6)',
+                border: index <= step ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                transition: 'all 0.3s ease',
+                minWidth: '40px',
+                position: 'relative'
+              }}
+            >
                 <div style={{
-                  width: '60px',
-                  height: '2px',
-                  background: step > index ? 'linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%)' : '#374151',
-                  marginRight: '0.5rem',
-                  borderRadius: '2px'
-                }} />
-              )}
+                width: '20px',
+                height: '20px',
+                borderRadius: '50%',
+                background: index <= step ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#374151',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '0.2rem',
+                fontSize: '0.7rem',
+                fontWeight: 'bold',
+                color: '#fff'
+              }}>
+                {stepItem.number}
+              </div>
+              <h3 style={{
+                color: index <= step ? '#c4b5fd' : '#fff',
+                margin: '0 0 0.1rem 0',
+                fontSize: '0.5rem',
+                fontWeight: '600',
+                textAlign: 'center'
+              }}>
+                {stepItem.label}
+              </h3>
+              <p style={{
+                color: '#fff',
+                margin: '0',
+                fontSize: '0.35rem',
+                textAlign: 'center',
+                lineHeight: '1.1'
+              }}>
+                {index === 0 && 'Review required documents for CIT filing'}
+                {index === 1 && 'Upload your financial documents'}
+                {index === 2 && 'AI processing your documents'}
+                {index === 3 && 'View your CIT analysis report'}
+              </p>
           </div>
         ))}
       </div>
@@ -1275,7 +1714,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
         {/* Step Content */}
         {step === 0 && (
           <div style={{ 
-            background: 'linear-gradient(135deg, #2d3561 0%, #3a4374 100%)',
+            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
             borderRadius: '16px', 
             padding: '2rem', 
             marginBottom: '1rem',
@@ -1445,15 +1884,124 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 Please ensure all documents are complete and up to date
               </p>
             
+            {/* Financial Statement Card - Top and Separate */}
+            <div style={{ 
+              marginBottom: '2rem',
+              display: 'flex',
+              justifyContent: 'center'
+            }}>
+              <div 
+                className="document-card" 
+                onClick={() => handleDocumentClick('Financial Statement')}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 58, 138, 0.2) 100%)',
+                  backdropFilter: 'blur(12px)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '2px solid rgba(30, 58, 138, 0.4)',
+                  boxShadow: '0 4px 15px rgba(15, 23, 42, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  transition: 'all 0.3s ease',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  height: '160px',
+                  minHeight: '160px',
+                  maxHeight: '160px',
+                  width: '300px',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {/* Icon container */}
+                <div style={{
+                  width: '50px',
+                  height: '50px',
+                  borderRadius: '50%',
+                  background: `linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.5rem',
+                  color: '#fff',
+                  flexShrink: 0,
+                  position: 'relative',
+                  zIndex: 2,
+                  boxShadow: `0 4px 10px rgba(30, 58, 138, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)`
+                }}>
+                  <MdAssessment style={{ fontSize: '1.5rem', color: '#fff' }} />
+                </div>
+                
+                {/* Content */}
+                <div style={{ 
+                  textAlign: 'center',
+                  position: 'relative',
+                  zIndex: 2,
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  paddingBottom: '0.5rem'
+                }}>
+                  <h3 style={{ 
+                    color: '#fff', 
+                    marginBottom: '0.5rem', 
+                    fontSize: '1.1rem',
+                    fontWeight: '700',
+                    textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+                    letterSpacing: '0.2px',
+                    lineHeight: '1.2',
+                    margin: '0 0 0.5rem 0'
+                  }}>
+                    Financial Statement
+                  </h3>
+                  <p style={{ 
+                    color: 'rgba(255,255,255,0.85)', 
+                    margin: 0, 
+                    fontSize: '0.8rem',
+                    lineHeight: '1.3',
+                    textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
+                    padding: '0 0.3rem'
+                  }}>
+                    Profit & Loss, Balance Sheet for current year
+                  </p>
+                </div>
+
+                {/* Click indicator */}
+                <div className="click-indicator" style={{
+                  position: 'absolute',
+                  bottom: '0.75rem',
+                  right: '0.75rem',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  background: 'rgba(30, 58, 138, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.7rem',
+                  color: '#fff',
+                  opacity: 0.8,
+                  transition: 'all 0.3s ease'
+                }}>
+                  →
+                </div>
+              </div>
+            </div>
+
+            {/* Other Document Cards - Below Financial Statement */}
             <div style={{ 
               display: 'grid', 
                 gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
               gap: '1rem',
                 marginBottom: '1rem'
             }}>
-              {requiredDocuments.map((doc, index) => (
+              {requiredDocuments.slice(1).map((doc, index) => (
                 <div 
-                  key={index}
+                  key={index + 1}
                   className="document-card" 
                   onClick={() => handleDocumentClick(doc.title)}
                   style={{
@@ -1660,6 +2208,36 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
               marginTop: '2rem'
             }}>
               <button
+                onClick={viewSavedAnalysis}
+                style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: '#fff',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 3px 10px rgba(0,0,0,0.2)',
+                  backdropFilter: 'blur(10px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 3px 10px rgba(0,0,0,0.2)';
+                }}
+              >
+                📊 Previous Analysis
+              </button>
+              
+              <button
                 onClick={() => setShowConfirmationModal(true)}
                 style={{
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -1685,110 +2263,59 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
               >
                 Proceed
               </button>
-              
-              <button
-                onClick={() => {
-                  if (existingAnalysis) {
-                    // Force immediate state update
-                    setShowAnalysisModal(prevState => !prevState);
-                  } else {
-                    // Create sample data and show analysis
-                    const sampleData = createSampleAnalysis();
-                    setShowAnalysisModal(true);
-                  }
-                }}
-                style={{
-                  background: showAnalysisModal 
-                    ? 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)' 
-                    : 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0.75rem 1.5rem',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  boxShadow: '0 3px 10px rgba(0,0,0,0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 3px 10px rgba(0,0,0,0.2)';
-                }}
-              >
-                <span>{showAnalysisModal ? '❌' : '📊'}</span>
-                {showAnalysisModal ? 'Hide Analysis' : 'Your Previous Analysis'}
-              </button>
             </div>
           </div>
         )}
 
         {step === 1 && (
-          <div style={{ background: '#23244d', borderRadius: '12px', padding: '1.5rem', marginBottom: '1rem' }}>
-            <h2 style={{ color: '#fff', marginBottom: '1rem', textAlign: 'center', fontSize: '1.3rem' }}>
-              Upload Required Documents
+          <div style={{ background: '#0f172a', borderRadius: '12px', padding: '2rem', marginBottom: '1rem', border: '1px solid #1e293b' }}>
+            <h2 style={{ color: '#fff', marginBottom: '0.5rem', textAlign: 'center', fontSize: '1.5rem', fontWeight: '600' }}>
+              Upload Documents
             </h2>
+            <p style={{ color: '#bfc9da', marginBottom: '2rem', textAlign: 'center', fontSize: '1rem' }}>
+              Upload your CIT documents for analysis
+            </p>
 
             {/* Year Selection */}
             <div style={{ 
               marginBottom: '2rem',
-              background: '#1e293b',
-              padding: '1.5rem',
-              borderRadius: '12px',
-              border: '1px solid #3a3b5a'
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              gap: '1rem'
             }}>
               <label style={{ 
                 color: '#bfc9da', 
                 fontSize: '1rem', 
-                fontWeight: '500',
-                display: 'block',
-                marginBottom: '1rem'
+                fontWeight: '500'
               }}>
-                Select Year:
+                Import Year:
               </label>
-              <div style={{ 
-                display: 'flex', 
-                gap: '1rem', 
-                flexWrap: 'wrap'
-              }}>
-                {['2023', '2024', '2025'].map((year) => (
-                  <button
-                    key={year}
-                    onClick={() => setSelectedYear(year)}
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
                 style={{
-                      background: selectedYear === year ? '#ec4899' : '#374151',
+                  background: '#1e293b',
+                  border: '1px solid #374151',
+                  borderRadius: '6px',
+                  padding: '0.5rem 1rem',
                   color: '#fff',
-                      border: 'none',
-                  borderRadius: '8px',
-                      padding: '0.75rem 1.5rem',
                   fontSize: '1rem',
-                      fontWeight: '600',
+                  fontWeight: '500',
+                  minWidth: '100px',
                   cursor: 'pointer',
-                      transition: 'all 0.3s ease',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                    }}
-                    onMouseOver={(e) => {
-                      if (selectedYear !== year) {
-                  e.target.style.background = '#4b5563';
-                      }
+                  outline: 'none'
                 }}
-                    onMouseOut={(e) => {
-                      if (selectedYear !== year) {
-                  e.target.style.background = '#374151';
-                      }
-                    }}
-                  >
-                    {year}
-                  </button>
-                ))}
-              </div>
+              >
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
+                <option value="2022">2022</option>
+                <option value="2021">2021</option>
+                <option value="2020">2020</option>
+                <option value="2019">2019</option>
+                <option value="2018">2018</option>
+              </select>
             </div>
             
             {/* Upload Options */}
@@ -1800,23 +2327,42 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
             }}>
               {/* Choose Files Box */}
               <div style={{
-                background: '#1e293b',
+                background: '#0f172a',
                 borderRadius: '12px',
                 padding: '2rem',
-                border: '1px solid #3a3b5a',
+                border: '2px dashed #475569',
               textAlign: 'center',
-                transition: 'all 0.3s ease'
-              }}>
+                transition: 'all 0.3s ease',
+                cursor: 'pointer'
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = '#667eea';
+                e.currentTarget.style.background = '#0f172a';
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.style.borderColor = '#475569';
+                e.currentTarget.style.background = '#0f172a';
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const files = Array.from(e.dataTransfer.files);
+                handleFileUpload({ target: { files } });
+                e.currentTarget.style.borderColor = '#475569';
+                e.currentTarget.style.background = '#0f172a';
+              }}
+            >
                 <div style={{ 
                   fontSize: '3rem', 
-                  color: '#3b82f6', 
+                  color: '#667eea', 
                   marginBottom: '1rem' 
                 }}>
-                  📁
+                  ⬆️
                 </div>
                 <h3 style={{ 
                   color: '#fff', 
-              marginBottom: '1rem',
+                  marginBottom: '0.5rem',
                   fontSize: '1.2rem',
                   fontWeight: '600'
                 }}>
@@ -1826,9 +2372,9 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                   color: '#bfc9da', 
                   marginBottom: '1.5rem', 
                   fontSize: '0.9rem',
-                  lineHeight: '1.5'
+                  lineHeight: '1.4'
                 }}>
-                  Upload documents directly from your device
+                  Upload your CIT documents manually
               </p>
               <input
                 ref={fileInputRef}
@@ -1839,12 +2385,8 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 style={{ display: 'none' }}
               />
                 <button 
-                  onClick={() => {
-                    console.log('Select Files button clicked');
-                    setShowFileUploadModal(true);
-                  }}
                   style={{
-                    background: '#3b82f6',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '8px',
@@ -1852,24 +2394,10 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     fontSize: '1rem',
                     fontWeight: '600',
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    margin: '0 auto',
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                  }}
-                  onMouseOver={(e) => {
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                    transition: 'all 0.3s ease'
                   }}
                 >
-                  <FaFileUpload />
-                  Select Files
+                  Drag & Drop or Click
                 </button>
               </div>
 
@@ -1880,7 +2408,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 background: '#1e293b',
                 borderRadius: '12px',
                 padding: '2rem',
-                border: '1px solid #3a3b5a',
+                border: '1px solid #475569',
                 textAlign: 'center',
                 transition: 'all 0.3s ease'
               }}>
@@ -1911,7 +2439,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     onClick={fetchAndLoadFinancialDocuments}
                     disabled={!userId || isLoadingDataroomFiles}
                     style={{
-                    background: isLoadingDataroomFiles ? '#6b7280' : '#ec4899',
+                    background: isLoadingDataroomFiles ? '#6b7280' : '#3b82f6',
                       color: '#fff',
                       border: 'none',
                     borderRadius: '8px',
@@ -1930,7 +2458,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                   onMouseOver={(e) => {
                     if (!isLoadingDataroomFiles && userId) {
                       e.target.style.transform = 'translateY(-2px)';
-                      e.target.style.boxShadow = '0 4px 12px rgba(236, 72, 153, 0.3)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
                     }
                   }}
                   onMouseOut={(e) => {
@@ -1941,7 +2469,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     }}
                   >
                     {isLoadingDataroomFiles ? (
-                      <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                      <div style={{ width: '16px', height: '16px', border: '2px solid #fff', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
                     ) : (
                       <FaCloudDownloadAlt />
                     )}
@@ -2010,18 +2538,22 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      border: '1px solid #3a3b5a'
+                      border: '1px solid #475569'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <HiDocumentText style={{ color: '#dc2626', fontSize: '1.5rem' }} />
     <div>
                           <p style={{ color: '#fff', margin: 0, fontWeight: 'bold' }}>{file.name}</p>
                           <p style={{ color: '#6b7280', margin: 0, fontSize: '0.9rem' }}>
-                            {(file.size / 1024 / 1024).toFixed(2)} MB • Uploaded: {file.uploadedAt}
+                            {file.size > 0 ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'Size not available'} • Uploaded: {file.uploadedAt}
+                            {file.source === 'financial_hub' && (
+                              <span style={{ color: '#3b82f6', marginLeft: '8px' }}>• From Financial Hub</span>
+                            )}
                           </p>
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {/* View Button - Show for all files */}
                                                   <button
                             onClick={() => handleViewFile(file)}
                             style={{
@@ -2039,7 +2571,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                             }}
                             title="View File"
                             onMouseEnter={(e) => {
-                              e.target.style.background = '#2563eb';
+                              e.target.style.background = '#1d4ed8';
                               e.target.style.transform = 'translateY(-1px)';
                             }}
                             onMouseLeave={(e) => {
@@ -2049,6 +2581,8 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                           >
                             <IoEyeOutline style={{ fontSize: '1.1rem' }} />
                           </button>
+                        
+                        {/* Download Button - Show for all files */}
                                                   <button
                             onClick={() => handleDownloadFile(file)}
                             style={{
@@ -2076,6 +2610,8 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                           >
                             <IoDownloadOutline style={{ fontSize: '1.1rem' }} />
                           </button>
+                        
+                        {/* Remove Button */}
                                                   <button
                             onClick={() => removeFile(file.id)}
                             style={{
@@ -2120,7 +2656,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 }}
                 disabled={isProcessing || uploadedFiles.length === 0}
                 style={{
-                  background: isProcessing || uploadedFiles.length === 0 ? '#6b7280' : '#059669',
+                  background: isProcessing || uploadedFiles.length === 0 ? '#6b7280' : '#3b82f6',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '6px',
@@ -2134,7 +2670,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                   margin: '0 auto'
                 }}
               >
-                {isProcessing && <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />}
+                {isProcessing && <div style={{ width: '16px', height: '16px', border: '2px solid #fff', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>}
                 {isProcessing ? 'Processing Documents...' : 'Approve to Analysis'}
               </button>
     </div>
@@ -2142,7 +2678,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
         )}
 
         {step === 2 && (
-          <div style={{ background: '#23244d', borderRadius: '16px', padding: '2rem', marginBottom: '2rem' }}>
+          <div style={{ background: '#1e293b', borderRadius: '16px', padding: '2rem', marginBottom: '2rem' }}>
             <h2 style={{ color: '#fff', marginBottom: '1.5rem', textAlign: 'center' }}>
               Corporate Income Tax Analysis Report
             </h2>
@@ -2156,7 +2692,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     borderRadius: '12px', 
                     padding: '1.5rem',
                     marginBottom: '2rem',
-                    border: '1px solid #3a3b5a'
+                    border: '1px solid #475569'
                   }}>
                     <div style={{ 
                       display: 'flex', 
@@ -2206,7 +2742,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                       borderRadius: '12px', 
                       padding: '2rem',
                       marginBottom: '2rem',
-                      border: '1px solid #3a3b5a'
+                      border: '1px solid #475569'
                     }}>
                       {/* Report Header */}
                       <div style={{ 
@@ -2328,7 +2864,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                             <div style={{ color: '#10b981', padding: '0.5rem 0', fontWeight: 'bold', borderTop: '1px solid #4b5563', paddingTop: '0.5rem' }}>{formatCurrency(formatReportData(processedResult.data).taxableIncome)}</div>
                             
                             <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Applied Tax Rate</div>
-                            <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>{(formatReportData(processedResult.data).taxRate * 100).toFixed(1)}%</div>
+                            <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>{formatReportData(processedResult.data).taxRate}</div>
                             
                             <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Final Tax Owed</div>
                             <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>{formatCurrency(formatReportData(processedResult.data).finalTaxOwed)}</div>
@@ -2428,7 +2964,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                             ) : (
                               <>
                                 <p style={{ margin: '0 0 0.5rem 0' }}>• Review depreciation schedule for accuracy and completeness.</p>
-                                <p style={{ margin: '0 0 0.5rem 0' }}>• Investigate why revenue is reported as $0 while expenses are significant.</p>
+                                <p style={{ margin: '0 0 0.5rem 0' }}>• Investigate why revenue is reported as €0 while expenses are significant.</p>
                                 <p style={{ margin: '0' }}>• Validate supporting documents for any missing or misclassified items.</p>
                               </>
                             )}
@@ -2461,8 +2997,11 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                         }}
                       >
                         <FaDownload />
-                        Download PDF Report
+                        Generate & Save PDF Report
                       </button>
+                      <p style={{ color: '#9ca3af', fontSize: '0.9rem', margin: 0 }}>
+                        The report will be saved to your account and can be accessed anytime
+                      </p>
                 </div>
                 </div>
                 )}
@@ -2495,7 +3034,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
         )}
 
         {step === 3 && (
-          <div style={{ background: '#23244d', borderRadius: '16px', padding: '2rem', textAlign: 'center' }}>
+          <div style={{ background: '#1e293b', borderRadius: '16px', padding: '2rem', textAlign: 'center' }}>
             <h2 style={{ color: '#fff', marginBottom: '1.5rem' }}>
               CIT Filing Complete
             </h2>
@@ -2520,7 +3059,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 Return to Tax Dashboard
               </button>
               <button
-                onClick={() => setStep(4)}
+                onClick={viewSavedAnalysis}
                 style={{
                   background: '#059669',
                   color: '#fff',
@@ -2538,33 +3077,26 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
           </div>
         )}
 
-        {(step === 4 || (existingAnalysis && showAnalysisModal)) && (
-          <div style={{ background: '#23244d', borderRadius: '16px', padding: '2rem', marginBottom: '2rem' }}>
+        {/* Step 4: Display Analysis Results */}
+        {step === 4 && processedResult && processedResult.data && (
+          <div style={{ background: '#1e293b', borderRadius: '16px', padding: '2rem', marginBottom: '2rem' }}>
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
               <h2 style={{ color: '#fff', marginBottom: '1rem' }}>
                 Your Corporate Tax Analysis
               </h2>
               <p style={{ color: '#bfc9da', fontSize: '1.1rem' }}>
-                Analysis completed on {existingAnalysis ? new Date(existingAnalysis.created_at).toLocaleDateString() : 'Today'}
+                Analysis completed on {new Date().toLocaleDateString()}
               </p>
             </div>
 
-            {existingAnalysis && (
-              <div style={{ 
-                background: '#1e293b', 
-                borderRadius: '12px', 
-                padding: '2rem',
-                marginBottom: '2rem',
-                border: '1px solid #3a3b5a'
-              }}>
-                {/* Display existing analysis data */}
-                <div style={{ display: 'grid', gap: '2rem' }}>
-                  {/* Company Information */}
+            {/* Company Info */}
+            {processedResult.data?.general_information && (
                   <div style={{
                     background: '#374151',
                     borderRadius: '8px',
                     padding: '1.5rem',
-                    border: '1px solid #4b5563'
+                border: '1px solid #4b5563',
+                marginBottom: '1.5rem'
                   }}>
                     <h4 style={{ 
                       color: '#3b82f6', 
@@ -2574,22 +3106,28 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     }}>
                       Company Information
                     </h4>
-                    <div style={{ color: '#d1d5db', fontSize: '1rem', lineHeight: '1.8' }}>
-                      <p style={{ margin: '0 0 0.5rem 0' }}>
-                        <strong>Company:</strong> {existingAnalysis.company_name}
-                      </p>
-                      <p style={{ margin: '0' }}>
-                        <strong>Fiscal Year:</strong> {existingAnalysis.fiscal_year}
-                      </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.9rem' }}>
+                  <span style={{ color: '#9ca3af' }}>Company:</span>
+                  <span style={{ color: '#d1d5db' }}>{processedResult.data.general_information.company_name || 'N/A'}</span>
+                  <span style={{ color: '#9ca3af' }}>Fiscal Year:</span>
+                  <span style={{ color: '#d1d5db' }}>{processedResult.data.general_information.fiscal_year || 'N/A'}</span>
                     </div>
                   </div>
+            )}
 
                   {/* Financial Summary */}
+            {(() => {
+              console.log('🔍 Financial Summary Debug - Full processedResult:', processedResult);
+              console.log('🔍 Breakdown data:', processedResult.data?.tax_return_summary?.breakdown);
+              console.log('🔍 Revenue value:', processedResult.data?.tax_return_summary?.breakdown?.Revenue);
+              return processedResult.data?.tax_return_summary?.breakdown;
+            })() && (
                   <div style={{
                     background: '#374151',
                     borderRadius: '8px',
                     padding: '1.5rem',
-                    border: '1px solid #4b5563'
+                border: '1px solid #4b5563',
+                marginBottom: '1.5rem'
                   }}>
                     <h4 style={{ 
                       color: '#3b82f6', 
@@ -2608,32 +3146,107 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                       padding: '1rem',
                       fontSize: '0.95rem'
                     }}>
-                      <div style={{ color: '#d1d5db', fontWeight: 'bold', borderBottom: '1px solid #4b5563', paddingBottom: '0.5rem' }}>Item</div>
-                      <div style={{ color: '#d1d5db', fontWeight: 'bold', borderBottom: '1px solid #4b5563', paddingBottom: '0.5rem' }}>Amount</div>
+                  <div style={{ color: '#d1d5db', fontWeight: 'bold', borderBottom: '1px solid #4b5563', paddingBottom: '0.5rem' }}>ITEM</div>
+                  <div style={{ color: '#d1d5db', fontWeight: 'bold', borderBottom: '1px solid #4b5563', paddingBottom: '0.5rem' }}>AMOUNT</div>
+                      
+                      {/* Debug Info - Show exact API values */}
+                      <div style={{ 
+                        background: '#1f2937', 
+                        padding: '0.5rem', 
+                        borderRadius: '4px',
+                        marginBottom: '0.5rem',
+                        fontSize: '0.8rem',
+                        color: '#9ca3af',
+                        gridColumn: '1 / -1'
+                      }}>
+                        <strong>🔍 API Values (Raw):</strong><br/>
+                        Revenue: {JSON.stringify(processedResult.data.tax_return_summary.breakdown.Revenue)} (Type: {typeof processedResult.data.tax_return_summary.breakdown.Revenue})<br/>
+                        Expenses: {JSON.stringify(processedResult.data.tax_return_summary.breakdown.Expenses)} (Type: {typeof processedResult.data.tax_return_summary.breakdown.Expenses})<br/>
+                        Taxable Income: {JSON.stringify(processedResult.data.tax_return_summary.breakdown['Taxable Income'])} (Type: {typeof processedResult.data.tax_return_summary.breakdown['Taxable Income']})<br/>
+                        Applied Tax Rate: {JSON.stringify(processedResult.data.tax_return_summary.breakdown['Applied Tax Rate'])} (Type: {typeof processedResult.data.tax_return_summary.breakdown['Applied Tax Rate']})<br/>
+                        Final Tax Owed: {JSON.stringify(processedResult.data.tax_return_summary.breakdown['Final Tax Owed'])} (Type: {typeof processedResult.data.tax_return_summary.breakdown['Final Tax Owed']})<br/>
+                        <br/>
+                        <strong>🔍 Full Breakdown Object:</strong><br/>
+                        {JSON.stringify(processedResult.data.tax_return_summary.breakdown, null, 2)}
+                      </div>
                       
                       <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Revenue</div>
-                      <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>{formatCurrency(existingAnalysis.revenue)}</div>
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0', textAlign: 'right' }}>
+                        {(() => {
+                          const revenueValue = processedResult.data.tax_return_summary.breakdown.Revenue;
+                          console.log('🔍 Revenue Display Debug:', {
+                            rawValue: revenueValue,
+                            type: typeof revenueValue,
+                            truthy: !!revenueValue,
+                            numberValue: Number(revenueValue),
+                            isZero: revenueValue === 0,
+                            isNull: revenueValue === null,
+                            isUndefined: revenueValue === undefined
+                          });
+                          
+                          if (revenueValue && revenueValue !== 0) {
+                            return `€${Number(revenueValue).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                          } else {
+                            return '€0.00';
+                          }
+                        })()}
+                      </div>
                       
                       <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Expenses</div>
-                      <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>{formatCurrency(existingAnalysis.expenses)}</div>
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0', textAlign: 'right' }}>
+                        {processedResult.data.tax_return_summary.breakdown.Expenses ? 
+                          `€${Number(processedResult.data.tax_return_summary.breakdown.Expenses).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 
+                          '€0.00'
+                        }
+                      </div>
+                      
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Depreciation</div>
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0', textAlign: 'right' }}>
+                        {processedResult.data.tax_return_summary.breakdown.Depreciation ? 
+                          `€${Number(processedResult.data.tax_return_summary.breakdown.Depreciation).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 
+                          '€0.00'
+                        }
+                      </div>
+                      
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Deductions</div>
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0', textAlign: 'right' }}>
+                        {processedResult.data.tax_return_summary.breakdown.Deductions ? 
+                          `€${Number(processedResult.data.tax_return_summary.breakdown.Deductions).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 
+                          '€0.00'
+                        }
+                      </div>
                       
                       <div style={{ color: '#10b981', padding: '0.5rem 0', fontWeight: 'bold', borderTop: '1px solid #4b5563', paddingTop: '0.5rem' }}>Taxable Income</div>
-                      <div style={{ color: '#10b981', padding: '0.5rem 0', fontWeight: 'bold', borderTop: '1px solid #4b5563', paddingTop: '0.5rem' }}>{formatCurrency(existingAnalysis.taxable_income)}</div>
+                      <div style={{ color: '#10b981', padding: '0.5rem 0', fontWeight: 'bold', textAlign: 'right', borderTop: '1px solid #4b5563', paddingTop: '0.5rem' }}>
+                        {processedResult.data.tax_return_summary.breakdown['Taxable Income'] ? 
+                          `€${Number(processedResult.data.tax_return_summary.breakdown['Taxable Income']).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 
+                          '€0.00'
+                        }
+                      </div>
+                      
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Applied Tax Rate</div>
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0', textAlign: 'right' }}>
+                        {processedResult.data.tax_return_summary.breakdown['Applied Tax Rate'] || '0%'}
+                      </div>
                       
                       <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>Final Tax Owed</div>
-                      <div style={{ color: '#d1d5db', padding: '0.5rem 0' }}>{formatCurrency(existingAnalysis.final_tax_owed)}</div>
+                      <div style={{ color: '#d1d5db', padding: '0.5rem 0', textAlign: 'right' }}>
+                        {processedResult.data.tax_return_summary.breakdown['Final Tax Owed'] ? 
+                          `€${Number(processedResult.data.tax_return_summary.breakdown['Final Tax Owed']).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 
+                          '€0.00'
+                        }
                     </div>
                   </div>
                 </div>
+            )}
 
                 {/* Action Buttons */}
                 <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                   <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button
                       onClick={() => {
-                        // Reconstruct the analysis data for PDF generation
-                        const reconstructedData = JSON.parse(existingAnalysis.raw_analysis_data || '{}');
-                        generatePDFReport(reconstructedData);
+                    console.log('Button clicked - processedResult.data:', processedResult.data);
+                    generatePDFReport(processedResult.data);
                       }}
                       style={{
                         background: '#059669',
@@ -2642,8 +3255,9 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                         borderRadius: '8px',
                         padding: '1rem 2rem',
                         fontSize: '1.1rem',
-                        fontWeight: 'bold',
+                    fontWeight: '600',
                         cursor: 'pointer',
+                    transition: 'all 0.3s ease',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.5rem'
@@ -2652,6 +3266,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                       <FaDownload />
                       Download PDF Report
                     </button>
+                  
                     <button
                       onClick={startNewAnalysis}
                       style={{
@@ -2661,211 +3276,29 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                         borderRadius: '8px',
                         padding: '1rem 2rem',
                         fontSize: '1.1rem',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Start New Analysis
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm('Are you sure you want to delete this analysis? This action cannot be undone.')) {
-                          deleteExistingAnalysis();
-                        }
-                      }}
-                      style={{
-                        background: '#dc2626',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '1rem 2rem',
-                        fontSize: '1.1rem',
-                        fontWeight: 'bold',
+                    fontWeight: '600',
                         cursor: 'pointer',
+                    transition: 'all 0.3s ease',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.5rem'
                       }}
                     >
-                      <FaTrash />
-                      Delete Analysis
+                  Start New Analysis
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* Confirmation Modal */}
-        {showConfirmationModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000
-          }}>
-            <div style={{
-              backgroundColor: '#23244d',
-              borderRadius: '16px',
-              padding: '2rem',
-              maxWidth: '500px',
-              width: '90%',
-              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
-            }}>
-              <h3 style={{
-                color: '#fff',
-                marginBottom: '1.5rem',
-                textAlign: 'center',
-                fontSize: '1.3rem',
-                fontWeight: '600'
-              }}>
-                Financial Statement Confirmation
-              </h3>
-              <p style={{
-                color: '#bfc9da',
-                marginBottom: '2rem',
-                textAlign: 'center',
-                fontSize: '1.1rem',
-                lineHeight: '1.6'
-              }}>
-                Is the financial statement ready for current financial year before applying for CIT?
-              </p>
-              <div style={{
-                display: 'flex',
-                gap: '1rem',
-                justifyContent: 'center'
-              }}>
-                <button
-                  onClick={() => {
-                    setShowConfirmationModal(false);
-                    setStep(1);
-                  }}
-                  style={{
-                    background: '#10b981',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '0.75rem 1.5rem',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseOver={(e) => {
-                    e.target.style.background = '#059669';
-                    e.target.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.target.style.background = '#10b981';
-                    e.target.style.transform = 'translateY(0)';
-                  }}
-                >
-                  Yes
-                </button>
-                <button
-                  onClick={() => {
-                    setShowConfirmationModal(false);
-                    navigate('/financial-overview');
-                  }}
-                  style={{
-                    background: '#6b7280',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '0.75rem 1.5rem',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseOver={(e) => {
-                    e.target.style.background = '#4b5563';
-                    e.target.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.target.style.background = '#6b7280';
-                    e.target.style.transform = 'translateY(0)';
-                  }}
-                >
-                  No
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Analysis Display */}
-        {showAnalysisModal && (
-          <div style={{ 
-            background: 'linear-gradient(135deg, #2d3561 0%, #3a4374 100%)',
-            borderRadius: '16px', 
-            padding: '2rem', 
-            marginBottom: '1rem',
-            boxShadow: '0 10px 20px rgba(0,0,0,0.1)'
-          }}>
-            {/* Header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '2rem',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-              paddingBottom: '1rem'
-            }}>
-              <h2 style={{
-                color: '#fff',
-                fontSize: '1.5rem',
-                fontWeight: '600',
-                margin: 0
-              }}>
+        {/* Step 4: Display Existing Analysis (when no processed result) */}
+        {step === 4 && !processedResult && existingAnalysis && (
+          <div style={{ background: '#1e293b', borderRadius: '16px', padding: '2rem', marginBottom: '2rem' }}>
+            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+              <h2 style={{ color: '#fff', marginBottom: '1rem' }}>
                 Your Corporate Tax Analysis
               </h2>
-              <button
-                onClick={() => setShowAnalysisModal(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#bfc9da',
-                  fontSize: '1.5rem',
-                  cursor: 'pointer',
-                  padding: '0.5rem',
-                  borderRadius: '4px',
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.color = '#fff';
-                  e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.color = '#bfc9da';
-                  e.target.style.background = 'none';
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Analysis Date */}
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '8px',
-              padding: '1rem',
-              marginBottom: '2rem',
-              textAlign: 'center'
-            }}>
-              <p style={{
-                color: '#bfc9da',
-                margin: 0,
-                fontSize: '1rem'
-              }}>
+              <p style={{ color: '#bfc9da', fontSize: '1.1rem' }}>
                 Analysis completed on {existingAnalysis ? new Date(existingAnalysis.created_at).toLocaleDateString() : new Date().toLocaleDateString()}
               </p>
             </div>
@@ -2901,6 +3334,8 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 </div>
               </div>
             </div>
+
+
 
             {/* Financial Summary */}
             <div style={{
@@ -2961,7 +3396,25 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                         color: '#fff',
                         fontWeight: '600'
                       }}>
-                        €{formatCurrency(existingAnalysis?.total_revenue || 0)}
+                        €{(() => {
+                          // Try to get revenue from different possible sources
+                          if (existingAnalysis?.revenue) {
+                            return Number(existingAnalysis.revenue).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                          }
+                          // Try to parse from raw_analysis_data if available
+                          if (existingAnalysis?.raw_analysis_data) {
+                            try {
+                              const parsedData = JSON.parse(existingAnalysis.raw_analysis_data);
+                              const revenue = parsedData?.tax_return_summary?.breakdown?.Revenue;
+                              if (revenue) {
+                                return Number(revenue).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                              }
+                            } catch (e) {
+                              console.warn('Could not parse raw analysis data for revenue');
+                            }
+                          }
+                          return '0,00';
+                        })()}
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
@@ -2972,7 +3425,25 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                         color: '#fff',
                         fontWeight: '600'
                       }}>
-                        €{formatCurrency(existingAnalysis?.total_expenses || 77279222.77)}
+                        €{(() => {
+                          // Try to get expenses from different possible sources
+                          if (existingAnalysis?.expenses) {
+                            return Number(existingAnalysis.expenses).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                          }
+                          // Try to parse from raw_analysis_data if available
+                          if (existingAnalysis?.raw_analysis_data) {
+                            try {
+                              const parsedData = JSON.parse(existingAnalysis.raw_analysis_data);
+                              const expenses = parsedData?.tax_return_summary?.breakdown?.Expenses;
+                              if (expenses) {
+                                return Number(expenses).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                              }
+                            } catch (e) {
+                              console.warn('Could not parse raw analysis data for expenses');
+                            }
+                          }
+                          return '0,00';
+                        })()}
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
@@ -2980,10 +3451,45 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                       <td style={{ 
                         padding: '1rem', 
                         textAlign: 'right', 
-                        color: (existingAnalysis?.taxable_income || -77279222.77) < 0 ? '#10b981' : '#fff',
+                        color: (() => {
+                          // Try to get taxable income from different possible sources
+                          let taxableIncome = 0;
+                          if (existingAnalysis?.taxable_income) {
+                            taxableIncome = Number(existingAnalysis.taxable_income);
+                          } else if (existingAnalysis?.raw_analysis_data) {
+                            try {
+                              const parsedData = JSON.parse(existingAnalysis.raw_analysis_data);
+                              const income = parsedData?.tax_return_summary?.breakdown?.['Taxable Income'];
+                              if (income) {
+                                taxableIncome = Number(income);
+                              }
+                            } catch (e) {
+                              console.warn('Could not parse raw analysis data for taxable income');
+                            }
+                          }
+                          return taxableIncome < 0 ? '#10b981' : '#fff';
+                        })() < 0 ? '#10b981' : '#fff',
                         fontWeight: '600'
                       }}>
-                        €{formatCurrency(existingAnalysis?.taxable_income || -77279222.77)}
+                        €{(() => {
+                          // Try to get taxable income from different possible sources
+                          if (existingAnalysis?.taxable_income) {
+                            return Number(existingAnalysis.taxable_income).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                          }
+                          // Try to parse from raw_analysis_data if available
+                          if (existingAnalysis?.raw_analysis_data) {
+                            try {
+                              const parsedData = JSON.parse(existingAnalysis.raw_analysis_data);
+                              const income = parsedData?.tax_return_summary?.breakdown?.['Taxable Income'];
+                              if (income) {
+                                return Number(income).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                              }
+                            } catch (e) {
+                              console.warn('Could not parse raw analysis data for taxable income');
+                            }
+                          }
+                          return '0,00';
+                        })()}
                       </td>
                     </tr>
                     <tr style={{
@@ -3004,13 +3510,97 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                         fontWeight: '700',
                         fontSize: '1.1rem'
                       }}>
-                        €{formatCurrency(existingAnalysis?.final_tax_owed || 0)}
+                        €{(() => {
+                          // Try to get final tax owed from different possible sources
+                          if (existingAnalysis?.final_tax_owed) {
+                            return Number(existingAnalysis.final_tax_owed).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                          }
+                          // Try to parse from raw_analysis_data if available
+                          if (existingAnalysis?.raw_analysis_data) {
+                            try {
+                              const parsedData = JSON.parse(existingAnalysis.raw_analysis_data);
+                              const taxOwed = parsedData?.tax_return_summary?.breakdown?.['Final Tax Owed'];
+                              if (taxOwed) {
+                                return Number(taxOwed).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                              }
+                            } catch (e) {
+                              console.warn('Could not parse raw analysis data for final tax owed');
+                            }
+                          }
+                          return '0,00';
+                        })()}
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* Report URL Section */}
+            {existingAnalysis?.report_url && (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '12px',
+                padding: '1.5rem',
+                marginBottom: '2rem',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <h3 style={{
+                  color: '#3b82f6',
+                  marginBottom: '1rem',
+                  fontSize: '1.2rem',
+                  fontWeight: '600'
+                }}>
+                  Generated Report
+                </h3>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  background: 'rgba(30, 58, 138, 0.2)',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  border: '1px solid rgba(30, 58, 138, 0.4)'
+                }}>
+                  <span style={{ fontSize: '2rem' }}>📄</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ color: '#fff', margin: '0 0 0.5rem 0', fontWeight: '600' }}>
+                      Corporate Tax Analysis Report
+                    </p>
+                    <p style={{ color: '#bfc9da', margin: 0, fontSize: '0.9rem' }}>
+                      Generated on {new Date(existingAnalysis.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => window.open(existingAnalysis.report_url, '_blank')}
+                    style={{
+                      background: '#10b981',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '0.5rem 1rem',
+                      fontSize: '0.9rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseOver={(e) => {
+                      e.target.style.background = '#059669';
+                      e.target.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.target.style.background = '#10b981';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <FaEye /> View Report
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div style={{
@@ -3047,9 +3637,9 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 <span>📄</span>
                 Download PDF Report
               </button>
+              
               <button
                 onClick={() => {
-                  setShowAnalysisModal(false);
                   startNewAnalysis();
                 }}
                 style={{
@@ -3082,6 +3672,125 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
           </div>
         )}
 
+        {/* Confirmation Modal */}
+        {showConfirmationModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}>
+            <div style={{
+              backgroundColor: '#0f172a',
+              borderRadius: '16px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '90%',
+              boxShadow: '0 20px 40px rgba(15, 23, 42, 0.8)',
+              border: '1px solid #1e293b'
+            }}>
+              <h3 style={{
+                color: '#fff',
+                marginBottom: '1.5rem',
+                textAlign: 'center',
+                fontSize: '1.3rem',
+                fontWeight: '600'
+              }}>
+                Financial Statement Confirmation
+              </h3>
+              <p style={{
+                color: '#bfc9da',
+                marginBottom: '2rem',
+                textAlign: 'center',
+                fontSize: '1.1rem',
+                lineHeight: '1.6'
+              }}>
+                Is the financial statement ready for current financial year before applying for CIT?
+              </p>
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={() => {
+                    setShowConfirmationModal(false);
+                    setStep(1); // Proceed to step 1 (Upload Documents)
+                  }}
+                  style={{
+                    background: '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.75rem 1.5rem',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.background = '#059669';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.background = '#10b981';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => {
+                    setShowConfirmationModal(false);
+                    navigate('/financial-overview');
+                  }}
+                  style={{
+                    background: '#6b7280',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.75rem 1.5rem',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.background = '#4b5563';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.background = '#6b7280';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                >
+                  No
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+
+
+
+
+
+            {/* Company Information */}
+           
+
+            {/* Financial Summary */}
+            
+
+            {/* Action Buttons */}
+           
+          </div>
         {/* Approval Modal */}
         {showApprovalModal && (
           <div style={{
@@ -3090,26 +3799,26 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
             left: 0,
             width: '100%',
             height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
             zIndex: 1000
           }}>
             <div style={{
-              backgroundColor: '#fff',
+              backgroundColor: '#0f172a',
               borderRadius: '16px',
               padding: '2rem',
               maxWidth: '600px',
               width: '90%',
               maxHeight: '90vh',
               overflow: 'auto',
-              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(0, 0, 0, 0.1)'
+              boxShadow: '0 20px 40px rgba(15, 23, 42, 0.8)',
+              border: '1px solid #1e293b'
             }}>
               {/* Header */}
               <h2 style={{
-                color: '#000',
+                color: '#fff',
                 fontSize: '1.5rem',
                 fontWeight: '600',
                 margin: '0 0 1.5rem 0',
@@ -3120,8 +3829,8 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
 
               {/* Information Banner */}
               <div style={{
-                background: '#fef3c7',
-                border: '1px solid #f59e0b',
+                background: '#0f172a',
+                border: '1px solid #1e293b',
                 borderRadius: '8px',
                 padding: '1rem',
                 marginBottom: '1.5rem',
@@ -3130,13 +3839,13 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                 gap: '0.5rem'
               }}>
                 <div style={{
-                  color: '#f59e0b',
+                  color: '#3b82f6',
                   fontSize: '1.2rem'
                 }}>
                   ⚠️
                 </div>
                 <p style={{
-                  color: '#92400e',
+                  color: '#bfc9da',
                   margin: 0,
                   fontSize: '0.95rem',
                   lineHeight: '1.5'
@@ -3147,13 +3856,14 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
 
               {/* Analysis Document Section */}
               <div style={{
-                background: '#f8fafc',
+                background: '#0f172a',
                 borderRadius: '12px',
                 padding: '1.5rem',
                 marginBottom: '1.5rem',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                border: '1px solid #1e293b'
               }}>
                 <div style={{
                   display: 'flex',
@@ -3161,13 +3871,14 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                   gap: '1rem'
                 }}>
                   <div style={{
-                    fontSize: '2rem'
+                    fontSize: '2rem',
+                    color: '#3b82f6'
                   }}>
                     📄
                   </div>
                   <div>
                     <h3 style={{
-                      color: '#000',
+                      color: '#fff',
                       margin: '0 0 0.25rem 0',
                       fontSize: '1.1rem',
                       fontWeight: '600'
@@ -3175,7 +3886,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                       Dutch Corporate Income Tax Analysis 2024
                     </h3>
                     <p style={{
-                      color: '#6b7280',
+                      color: '#bfc9da',
                       margin: 0,
                       fontSize: '0.9rem'
                     }}>
@@ -3199,7 +3910,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     transition: 'all 0.3s ease'
                   }}
                   onMouseOver={(e) => {
-                    e.target.style.background = '#eff6ff';
+                    e.target.style.background = '#1e293b';
                   }}
                   onMouseOut={(e) => {
                     e.target.style.background = 'none';
@@ -3230,7 +3941,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                   />
                   <div>
                     <p style={{
-                      color: '#000',
+                      color: '#fff',
                       margin: '0 0 0.5rem 0',
                       fontSize: '0.95rem',
                       lineHeight: '1.5'
@@ -3238,7 +3949,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                       I approve this tax analysis and confirm that the information appears accurate to the best of my knowledge
                     </p>
                     <p style={{
-                      color: '#6b7280',
+                      color: '#bfc9da',
                       margin: 0,
                       fontSize: '0.85rem',
                       lineHeight: '1.4'
@@ -3263,9 +3974,9 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                     setApprovalChecked(false);
                   }}
                   style={{
-                    background: '#6b7280',
+                    background: '#1e293b',
                     color: '#fff',
-                    border: 'none',
+                    border: '1px solid #475569',
                     borderRadius: '8px',
                     padding: '0.75rem 1.5rem',
                     fontSize: '1rem',
@@ -3286,7 +3997,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
                   }}
                   disabled={!approvalChecked}
                   style={{
-                    background: approvalChecked ? '#059669' : '#d1d5db',
+                    background: approvalChecked ? '#3b82f6' : '#475569',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '8px',
@@ -3312,7 +4023,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
           left: 0,
           width: '100%',
           height: '100%',
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backgroundColor: 'rgba(15, 23, 42, 0.95)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
@@ -3320,15 +4031,15 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
           backdropFilter: 'blur(4px)'
         }}>
           <div style={{
-            backgroundColor: '#1a1b2e',
+            backgroundColor: '#0f172a',
             borderRadius: '12px',
             padding: '1.5rem',
             maxWidth: '500px',
             width: '90%',
             maxHeight: '70vh',
             overflow: 'auto',
-            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.4)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 25px 50px rgba(15, 23, 42, 0.8)',
+            border: '1px solid #1e293b',
             position: 'relative'
           }}>
             {/* Header */}
@@ -3380,11 +4091,11 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
 
             {/* File Selection Area */}
             <div style={{
-              background: '#2a2b3e',
+              background: '#0f172a',
               borderRadius: '8px',
               padding: '1rem',
               marginBottom: '1.5rem',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
+              border: '1px solid #1e293b'
             }}>
               <h3 style={{
                 color: '#fff',
@@ -3449,7 +4160,7 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
             {/* Selected Files */}
             {uploadedFiles.length > 0 && (
               <div style={{
-                background: '#2a2b3e',
+                background: '#1e293b',
                 borderRadius: '8px',
                 padding: '1rem',
                 marginBottom: '1.5rem',
@@ -3614,8 +4325,6 @@ This document was loaded from your Financial Hub and contains your ${doc.doc_typ
           </div>
         </div>
       )}
-
-      </div>
     </div>
   );
 } 

@@ -4,6 +4,7 @@ import Login from './components/Login';
 import  Dashboard  from './components/Dashboard';
 import KYC from './components/KYCDocuments';
 import FinancialDocuments from './components/FinancialDocuments';
+import FinancialData from './components/FinancialData';
 import UserProfileForm from './components/UserProfileForm';
 import UserProfileView from './components/UserProfileView';
 import Layout from './components/Layout';
@@ -51,8 +52,6 @@ import CorporateIncomeTax from './components/CorporateIncomeTax';
 import Invoices from './components/Invoices';
 import BranchRegistrationRequirements from './components/BranchRegistrationRequirements';
 import VatRequirement from './components/VatRequirement';
-import FinancialData from './components/FinancialData';
-
 
 function App() { 
   
@@ -79,6 +78,9 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/financial-hub" element={<FinancialHub />} />
                   <Route path="/corporate-hub" element={<CorporateHub />} />
+            
+       
+        
                   <Route path="/ebranch" element={<EbranchDashboard />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/services" element={<Services />} />
@@ -95,6 +97,7 @@ function App() {
                   <Route path="/payment" element={<Payment />} />
                   <Route path="/documents/*" element={<KYC />} />
                   <Route path="/documents/financial" element={<FinancialDocuments />} />
+                  <Route path="/financial-data" element={<FinancialData />} />
                   <Route path="/calendar" element={<Calendar />} />
                   <Route path="/documents/certificate" element={<Certificate />} />
                   <Route path="/financial-overview" element={<FinancialOverview />} />
@@ -124,7 +127,6 @@ function App() {
                   <Route path="/target-company/:id" element={<TargetCompanyDetails />} />
                   <Route path="/invoices" element={<Invoices />} />
                   <Route path="/vat-requirement" element={<VatRequirement />} />
-                  <Route path="/financial-data" element={<FinancialData />} />
                 </Route>
               </Route>
             </Route>
